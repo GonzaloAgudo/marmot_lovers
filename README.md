@@ -67,7 +67,10 @@ curl "https://digitalassetlinks.googleapis.com/v1/statements:list?source.web.sit
 ```
 
 **Si cambias la clave de firma hay que actualizar la huella del
-`assetlinks.json`**, o el enlace dejará de abrir la app.
+`assetlinks.json`**, o el enlace dejará de abrir la app. Al pasar a la clave
+de release se dejaron las dos huellas (la nueva y la de la vieja clave de
+depuración) para que los APK ya instalados siguieran abriendo el enlace;
+cuando todo el mundo tenga el APK nuevo, la vieja se puede quitar.
 
 ### Repaso de la ronda
 
@@ -190,14 +193,58 @@ móvil, que es lo normal al instalar fuera de Play.
 
 ### Sobre la firma del APK
 
-La build de release se firma **con la clave de depuración**
-(`android/app/build.gradle.kts`). Es a propósito: esa es la SHA-1 registrada en
-Firebase, así que el acceso con Google funciona también en el APK que repartas.
+La build de release se firma con la **clave de release**
+(`android/app/release.keystore`) cuando existe `android/key.properties`.
+Ninguno de los dos está en el repo; `key.properties` tiene esta pinta:
 
-El precio es que **este APK no se puede subir a Google Play**. Si algún día
-quieres publicarlo, hay que crear un keystore de release, apuntarlo en
-`build.gradle.kts` y **añadir su SHA-1 en Firebase**, o el acceso con Google
-dejará de funcionar en la versión publicada.
+```
+storeFile=release.keystore
+keyAlias=marmot_lovers
+storePassword=...
+keyPassword=...
+```
+
+El keystore es PKCS12, así que la contraseña de la clave y la del almacén
+son la misma.
+
+La SHA-1 de esa clave está registrada en Firebase, así que el acceso con
+Google funciona en el APK que repartas, y su SHA-256 está en
+`web/.well-known/assetlinks.json` para que los enlaces abran la app.
+**Si algún día cambia la clave, hay que actualizar los dos sitios.**
+
+Sin `key.properties` (un clon fresco) la build cae en la clave de depuración,
+y el acceso con Google solo funcionará si la SHA-1 de ese equipo también está
+en Firebase. Al firmar ya con una clave de verdad, el APK vale para Play; si
+algún día se sube, basta con no perder el keystore.
+
+### APK desde GitHub Actions
+
+`.github/workflows/apk.yml` compila los APK (uno por ABI, firmados con la
+clave de release) en cada push a `main` y bajo demanda. Antes de compilar
+pasa `flutter analyze` y `flutter test`; si algo falla, no hay APK. Los APK
+quedan como **artefacto** de la ejecución (90 días), descargables desde el
+resumen del workflow en la pestaña Actions.
+
+Además, con cada merge a `main` crea (o actualiza) la **GitHub Release**
+`v<versión>` y adjunta solo el APK arm64 (`app-arm64-v8a-release.apk`), que
+queda en la pestaña Releases sin caducidad. Para sacar versión basta subir
+el número en `pubspec.yaml` y hacer merge a `main`; si se hace merge sin
+subir la versión, la release existente se actualiza con el APK nuevo.
+
+La firma sale de cuatro secretos del repo
+(Settings → Secrets and variables → Actions):
+
+| Secreto | Valor |
+|---|---|
+| `RELEASE_KEYSTORE_BASE64` | salida de `base64 -w0 android/app/release.keystore` |
+| `RELEASE_KEY_ALIAS` | `marmot_lovers` |
+| `RELEASE_STORE_PASSWORD` | la contraseña del almacén |
+| `RELEASE_KEY_PASSWORD` | la misma (es un PKCS12) |
+
+Para que el APK de CI funcione del todo hacen falta además dos cosas fuera de
+GitHub: tener la SHA-1 de la clave de release en Firebase (Authentication →
+Google) y publicar el `assetlinks.json` con
+`firebase deploy --only hosting`.
 
 ## Icono de la app
 
@@ -234,24 +281,32 @@ Para **Android** ya está todo puesto en el repo:
 
 - `android/app/google-services.json` es el bueno, con el cliente Android
   (`client_type: 1`) y el cliente web (`client_type: 3`).
-- La huella SHA-1 registrada es la del keystore de depuración de este equipo:
+- Están registradas dos huellas SHA-1:
+  - la de la **clave de release** (la que firman los APK que se reparten,
+    incluidos los de GitHub Actions):
 
-  ```
-  EB:65:70:8A:E5:69:D9:69:58:3E:33:0F:0C:D6:C7:14:F4:23:60:67
-  ```
+    ```
+    18:C7:4F:53:51:5D:46:1D:12:47:53:77:DA:54:12:E2:3A:8D:76:DE
+    ```
+  - la del keystore de depuración del equipo donde nació el proyecto, para
+    las builds locales:
 
-Para sacar esa huella en otro equipo (cada uno tiene la suya, y hay que
-añadirla también en Firebase o el acceso con Google fallará ahí):
+    ```
+    EB:65:70:8A:E5:69:D9:69:58:3E:33:0F:0C:D6:C7:14:F4:23:60:67
+    ```
+
+Para sacar la huella de depuración en otro equipo (cada uno tiene la suya, y
+hay que añadirla también en Firebase o el acceso con Google fallará ahí):
 
 ```bash
 keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android
 ```
 
-Ahora mismo la build de release se firma con la clave de depuración
-(`app/build.gradle.kts`), así que el APK que compartas con tus amigos también
-funciona. **Cuando pongas una clave de release de verdad, o subas a Play, hay
-que añadir su SHA-1 en Firebase**, o el acceso con Google fallará solo en la
-versión publicada.
+La de la clave de release se saca igual, con su contraseña:
+
+```bash
+keytool -list -v -keystore android/app/release.keystore -alias marmot_lovers
+```
 
 No hace falta escribir ningún ID de cliente en el código: Android lo saca del
 `google-services.json` y la web usa el popup de Firebase directamente.
@@ -392,3 +447,15 @@ en solo lectura.
 ```bash
 flutter test
 ```
+
+## Buenas prácticas
+
+Antes de ponerte a escribir nada, haz siempre un `git fetch` para ver qué
+ramas y cambios nuevos hay en el remoto y no trabajar sobre una copia vieja:
+
+```bash
+git fetch
+```
+
+Sin `--prune`: no queremos que se borre del tracking remoto nada en lo que
+otro pueda estar trabajando.
