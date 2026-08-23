@@ -111,6 +111,38 @@ de la barra superior y la elección se recuerda.
   Las de tu mano se amplían manteniéndolas pulsadas, porque al tocarlas las
   eliges para jugar.
 
+## Si te acaban de pasar este repo
+
+```bash
+flutter pub get
+```
+
+```bash
+flutter run
+```
+
+El proyecto ya apunta al Firebase de Gonzalo, así que **funciona sin
+configurar nada** y juegas contra la misma base de datos que los demás.
+
+Dos avisos:
+
+- **El acceso con Google fallará en tu build de Android.** Está atado a la
+  huella SHA-1 del keystore de depuración de *ese* equipo, y el tuyo tiene
+  otra. Mientras tanto entra con correo y contraseña, o usa
+  https://marmot-lovers.web.app. Si lo quieres arreglar, pásale tu SHA-1 a
+  Gonzalo para que la añada en Firebase:
+
+  ```bash
+  keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android
+  ```
+
+- Los tests de las reglas de Firestore (`test/firestore_rules_test.mjs`)
+  necesitan npm y el emulador:
+
+  ```bash
+  npm install @firebase/rules-unit-testing firebase
+  ```
+
 ## Cómo ejecutarlo
 
 ```bash
