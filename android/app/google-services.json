@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "73613507053",
+    "project_id": "marmot-lovers",
+    "storage_bucket": "marmot-lovers.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:73613507053:android:f986d6452a4a4a4f6f4fe4",
+        "android_client_info": {
+          "package_name": "com.marmota.marmot_lovers"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "73613507053-bo5tu8t93hhp3n4udlaigm5gaeqbm2lg.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.marmota.marmot_lovers",
+            "certificate_hash": "eb65708ae569d969583e330f0cd6c714f4236067"
+          }
+        },
+        {
+          "client_id": "73613507053-qh1qtt8he3a7rbd11f8g8acnctsd8rpv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCpx95KMkPACBs_Wspi8-gJjepWlMMzK5U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "73613507053-qh1qtt8he3a7rbd11f8g8acnctsd8rpv.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "73613507053-aupmksto7ve6oe8gqaeqtk4q8b6in297.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.marmota.marmotLovers"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

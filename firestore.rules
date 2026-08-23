@@ -1,0 +1,42 @@
+rules_version = '2';
+
+// Reglas minimas para jugar entre amigos: hay que estar autenticado.
+// OJO: la logica del juego corre en el movil, asi que cualquier jugador
+// autenticado puede leer los documentos de la sala (incluidas las manos de
+// los demas). Para que sea imposible hacer trampas hay que mover la logica
+// a Cloud Functions y bloquear la escritura directa aqui.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /salas/{idSala} {
+
+      // Una sala se considera abandonada si lleva 2 horas sin actividad.
+      // `actualizada` la escribe el motor en cada jugada.
+      function abandonada() {
+        return !('actualizada' in resource.data)
+            || resource.data.actualizada < request.time - duration.value(2, 'h');
+      }
+
+      // Caso aparte: el ultimo jugador sale del lobby y la sala queda vacia.
+      function seVaElUltimo() {
+        return 'orden_jugadores' in resource.data
+            && resource.data.orden_jugadores.size() <= 1
+            && request.auth.uid in resource.data.orden_jugadores;
+      }
+
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+
+      // Solo se pueden borrar las salas abandonadas o las que se quedan
+      // vacias. Asi la limpieza automatica no puede cargarse una partida
+      // que se esta jugando, ni aunque el reloj del movil vaya mal.
+      allow delete: if request.auth != null
+                    && (abandonada() || seVaElUltimo());
+
+      match /jugadores/{uid} {
+        allow read: if request.auth != null;
+        allow write: if request.auth != null;
+      }
+    }
+  }
+}

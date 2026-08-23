@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.marmota.marmot_lovers",
+      "sha256_cert_fingerprints": [
+        "42:ED:78:4C:E5:2F:A6:8E:31:3A:F0:D0:81:2E:09:13:98:61:97:14:82:7E:19:A5:A8:C7:60:DD:F5:DB:1C:01"
+      ]
+    }
+  }
+]
