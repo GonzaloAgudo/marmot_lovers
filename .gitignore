@@ -53,3 +53,7 @@ app.*.map.json
 
 # Dependencias del test de reglas de Firestore (npm)
 node_modules/
+
+# Artefactos de build de Gradle
+/android/build/
+/android/app/build/
