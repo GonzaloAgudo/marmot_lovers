@@ -111,10 +111,7 @@ bool _destelloPintando(WidgetTester tester) {
 
 /// La carta grande que hay dentro del panel de "ultima jugada".
 Finder _cartaDeLaMesa(int valor) => find.descendant(
-      of: find.ancestor(
-        of: find.text('ULTIMA JUGADA'),
-        matching: find.byType(Panel),
-      ),
+      of: find.byKey(const Key('ultimaJugada')),
       matching: find.byWidgetPredicate(
           (w) => w is CartaWidget && w.valor == valor),
     );
@@ -353,6 +350,7 @@ void main() {
           'nombre': 'Marta',
           'carta': 4,
           'resultado': 'Marta queda protegida hasta su proximo turno.',
+          'efecto': 'protegido',
         }),
         [
           _jug('yo', 'Gonzalo', 0, mano: [8, 2], jugadas: [1]),
@@ -361,10 +359,11 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('ULTIMA JUGADA'), findsOneWidget);
+      expect(find.byKey(const Key('ultimaJugada')), findsOneWidget);
       expect(find.text('4  La Sabia'), findsOneWidget);
-      expect(find.text('Marta queda protegida hasta su proximo turno.'),
-          findsOneWidget);
+      // Ya no se cuenta con un parrafo: se ve el sello del efecto.
+      expect(find.text('Marta se protege'), findsOneWidget);
+      expect(find.byIcon(Icons.shield), findsWidgets);
       // La carta grande dentro del panel de la ultima jugada.
       expect(_cartaDeLaMesa(4), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -634,6 +633,111 @@ void main() {
       await tester.tap(find.byIcon(Icons.notifications_active));
       await tester.pumpAndSettle();
       expect(find.byIcon(Icons.notifications_off), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Animacion de la jugada', () {
+    testWidgets('una eliminacion se ve con su sello, no con un parrafo',
+        (tester) async {
+      await _pintar(
+        tester,
+        _sala(ultimaJugada: {
+          'uid': 'r1',
+          'nombre': 'Marta',
+          'carta': 3,
+          'resultado': 'Marta gana la comparacion: Javi queda eliminado.',
+          'objetivo_uid': 'r2',
+          'objetivo_nombre': 'Javi',
+          'efecto': 'eliminado',
+        }),
+        [
+          _jug('yo', 'Gonzalo', 0, mano: [8, 2]),
+          _jug('r1', 'Marta', 1, jugadas: [3]),
+          _jug('r2', 'Javi', 2, jugadas: [1], vivo: false),
+        ],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Javi fuera'), findsOneWidget);
+      expect(find.byIcon(Icons.dangerous), findsWidgets);
+      // El parrafo largo ya no esta en la mesa.
+      expect(find.textContaining('gana la comparacion'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('cada efecto tiene su sello', (tester) async {
+      // Los streams se crean una sola vez, asi que las jugadas se van
+      // emitiendo por el stream, igual que en una partida de verdad.
+      final repo = _RepoVivo();
+      addTearDown(() {
+        repo.salas.close();
+        repo.jugadores.close();
+      });
+
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = const Size(390, 844);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider(
+          create: (_) => StyleProvider(),
+          child: MaterialApp(
+            theme: AppTheme.oscuro,
+            home:
+                GameScreen(idSala: '7K2P', miUid: 'yo', repositorio: repo),
+          ),
+        ),
+      );
+
+      final mesa = [
+        _jug('yo', 'Gonzalo', 0, mano: [8, 2]),
+        _jug('r1', 'Marta', 1),
+      ];
+      repo.salas.add(_sala());
+      await tester.pump();
+      repo.jugadores.add(mesa);
+      await tester.pumpAndSettle();
+
+      const casos = {
+        4: ['protegido', 'Marta se protege'],
+        8: ['intercambio', 'Cartas cambiadas'],
+        1: ['fallo', 'Falla'],
+        7: ['rebarajado', 'Se reparte de nuevo'],
+        3: ['eliminado', 'Javi fuera'],
+      };
+
+      for (final caso in casos.entries) {
+        repo.salas.add(_sala(ultimaJugada: {
+          'uid': 'r1',
+          'nombre': 'Marta',
+          'carta': caso.key,
+          'resultado': '',
+          'objetivo_uid': 'r2',
+          'objetivo_nombre': 'Javi',
+          'efecto': caso.value[0],
+        }));
+        await tester.pumpAndSettle();
+
+        expect(find.text(caso.value[1]), findsOneWidget,
+            reason: 'falta el sello de ${caso.value[0]}');
+      }
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Micro al caer eliminado', () {
+    testWidgets('el interruptor esta en la barra y se puede apagar',
+        (tester) async {
+      await _pintar(tester, _sala(), [
+        _jug('yo', 'Gonzalo', 0, mano: [8, 2]),
+        _jug('r1', 'Marta', 1),
+      ]);
+
+      expect(find.byIcon(Icons.mic), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.mic));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.mic_off), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

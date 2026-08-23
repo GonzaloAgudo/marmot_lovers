@@ -166,7 +166,7 @@ void main() {
       // Las cartas con las que se decidio la ronda, de los que siguen vivos.
       expect(_cartasGrandes(t, 9), 1);
       expect(_cartasGrandes(t, 6), 1);
-      expect(find.text('VER QUIEN GANA'), findsOneWidget);
+      expect(find.text('VER QUIEN GANA LA RONDA'), findsOneWidget);
       expect(t.takeException(), isNull);
     });
 

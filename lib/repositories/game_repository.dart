@@ -287,16 +287,20 @@ class GameRepository {
     }
   }
 
-  /// Borra una sala y su subcolección de jugadores.
+  /// Borra una sala y sus subcolecciones (jugadores y reacciones de voz).
   ///
   /// Firestore no borra las subcolecciones al borrar el documento padre: si
   /// no se hace a mano, los jugadores se quedan ahí colgados para siempre.
   Future<bool> _borrarSala(DocumentReference<Map<String, dynamic>> ref) async {
     try {
       final jugadores = await ref.collection('jugadores').get();
+      final audios = await ref.collection('audios').get();
       final batch = _db.batch();
       for (final j in jugadores.docs) {
         batch.delete(j.reference);
+      }
+      for (final a in audios.docs) {
+        batch.delete(a.reference);
       }
       batch.delete(ref);
       await batch.commit();
@@ -410,6 +414,19 @@ class GameRepository {
       });
 
       await batch.commit();
+
+      // Las reacciones de voz de la ronda anterior ya no pintan nada.
+      try {
+        final audios = await salaRef.collection('audios').get();
+        if (audios.docs.isNotEmpty) {
+          final limpieza = _db.batch();
+          for (final a in audios.docs) {
+            limpieza.delete(a.reference);
+          }
+          await limpieza.commit();
+        }
+      } catch (_) {}
+
       return null;
     } catch (e) {
       return 'No se pudo repartir la ronda: $e';
@@ -556,6 +573,10 @@ class GameRepository {
             .where((p) => p.uid != miUid && p.vivo && !p.protegido)
             .toList();
 
+        // Que ha provocado la carta, para poder animarlo en la mesa.
+        var efecto = Efecto.nada;
+        _EstadoJugador? afectado;
+
         _EstadoJugador? objetivo;
         if (Cartas.requiereObjetivo(valor)) {
           if (objetivosLegales.isEmpty) {
@@ -587,11 +608,15 @@ class GameRepository {
                     '${yo.nombre} adivina que ${objetivo.nombre} tenia un '
                     '$adivinanza: acierta y queda eliminado.');
                 objetivo.eliminar();
+                efecto = Efecto.eliminado;
+                afectado = objetivo;
               } else {
                 _log(
                     registro,
                     '${yo.nombre} dice que ${objetivo.nombre} tiene un '
                     '$adivinanza: falla, y ${objetivo.nombre} no revela nada.');
+                efecto = Efecto.fallo;
+                afectado = objetivo;
               }
             }
             break;
@@ -603,6 +628,7 @@ class GameRepository {
             } else {
               final vista = mazo.removeAt(0);
               yo.pendiente = AccionPendiente(tipo: 'ratonera', carta: vista);
+              efecto = Efecto.mirada;
               _log(registro,
                   '${yo.nombre} mira la carta superior del mazo en secreto.');
             }
@@ -622,15 +648,21 @@ class GameRepository {
                     '${yo.nombre} gana la comparacion: ${objetivo.nombre} '
                     'queda eliminado con un ${objetivo.carta}.');
                 objetivo.eliminar();
+                efecto = Efecto.eliminado;
+                afectado = objetivo;
               } else if (retenida < objetivo.carta) {
                 _log(
                     registro,
                     '${objetivo.nombre} gana la comparacion: ${yo.nombre} '
                     'queda eliminado con un $retenida.');
                 yo.eliminar();
+                efecto = Efecto.autoEliminado;
+                afectado = yo;
               } else {
                 _log(registro,
                     '${yo.nombre} y ${objetivo.nombre} empatan: no pasa nada.');
+                efecto = Efecto.nada;
+                afectado = objetivo;
               }
             }
             break;
@@ -639,6 +671,8 @@ class GameRepository {
             yo.protegido = true;
             _log(registro,
                 '${yo.nombre} queda protegido hasta su proximo turno.');
+            efecto = Efecto.protegido;
+            afectado = yo;
             break;
 
           case 5: // El Rey de las Mareas: forzar a bajar carta y robar otra.
@@ -650,10 +684,13 @@ class GameRepository {
                   registro,
                   '${yo.nombre} obliga a ${objetivo.nombre} a bajar su '
                   '$forzada ${Cartas.nombreCorto(forzada)} sin efecto.');
+              efecto = Efecto.forzado;
+              afectado = objetivo;
               if (forzada == 10) {
                 _log(registro,
                     'Era el Rey del Trono: ${objetivo.nombre} queda eliminado.');
                 objetivo.eliminar();
+                efecto = Efecto.eliminado;
               } else if (mazo.isNotEmpty) {
                 objetivo.mano.add(mazo.removeAt(0));
               } else if (cartaOculta != null) {
@@ -679,6 +716,7 @@ class GameRepository {
             } else {
               yo.pendiente =
                   AccionPendiente(tipo: 'enterrador', carta: cartaOculta);
+              efecto = Efecto.mirada;
               _log(registro,
                   '${yo.nombre} desentierra la carta apartada en secreto.');
             }
@@ -703,6 +741,7 @@ class GameRepository {
                 registro,
                 '${participantes.map((p) => p.nombre).join(', ')} devuelven su '
                 'carta al mazo, se baraja y se reparte de nuevo.');
+            efecto = Efecto.rebarajado;
             break;
 
           case 8: // La Forja: intercambio de manos.
@@ -718,6 +757,8 @@ class GameRepository {
                   'dejo un $retenida.');
               _log(registro,
                   '${yo.nombre} y ${objetivo.nombre} intercambian sus cartas.');
+              efecto = Efecto.intercambio;
+              afectado = objetivo;
             }
             break;
 
@@ -732,6 +773,8 @@ class GameRepository {
             } else {
               conRey.mano = [retenida];
               yo.mano = [10];
+              efecto = Efecto.intercambio;
+              afectado = conRey;
               _log(
                   registro,
                   '${conRey.nombre} tenia al Rey del Trono. Ahora lo tiene '
@@ -743,6 +786,8 @@ class GameRepository {
             _log(registro,
                 '${yo.nombre} baja al Rey del Trono y queda eliminado al instante.');
             yo.eliminar();
+            efecto = Efecto.autoEliminado;
+            afectado = yo;
             break;
         }
 
@@ -756,6 +801,9 @@ class GameRepository {
           resultado: registro.length > marcaRegistro
               ? registro.sublist(marcaRegistro).join(' ')
               : '',
+          objetivoUid: afectado?.uid ?? objetivo?.uid,
+          objetivoNombre: afectado?.nombre ?? objetivo?.nombre,
+          efecto: efecto,
         );
 
         final salaUpdate = <String, dynamic>{
@@ -862,6 +910,9 @@ class GameRepository {
           'carta_oculta': nuevaOculta,
         };
         if (yo.jugadas.isNotEmpty) {
+          // Se conserva a quien afectaba la jugada original: esto solo
+          // completa la carta de dos pasos, no es una jugada nueva.
+          final original = sala.historial.isNotEmpty ? sala.historial.last : null;
           final jugada = UltimaJugada(
             uid: miUid,
             nombre: yo.nombre,
@@ -869,6 +920,9 @@ class GameRepository {
             resultado: registro.length > marcaRegistro
                 ? registro.sublist(marcaRegistro).join(' ')
                 : '',
+            objetivoUid: original?.objetivoUid,
+            objetivoNombre: original?.objetivoNombre,
+            efecto: original?.efecto ?? Efecto.mirada,
           );
           salaUpdate['ultima_jugada'] = jugada.toMap();
           salaUpdate['historial_jugadas'] =

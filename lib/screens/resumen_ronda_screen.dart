@@ -6,6 +6,7 @@ import '../models/carta.dart';
 import '../models/jugador.dart';
 import '../models/sala.dart';
 import '../theme/app_theme.dart';
+import '../widgets/animacion_jugada.dart';
 import '../widgets/carta_widget.dart';
 
 /// Repaso de la ronda antes de ver el marcador.
@@ -51,6 +52,10 @@ class _ResumenRondaScreenState extends State<ResumenRondaScreen> {
   List<UltimaJugada> get _jugadas => widget.sala.historial;
 
   bool get _esRevelacion => _paso >= _jugadas.length;
+
+  /// Si esta ronda es la que acaba la partida.
+  bool get _decideLaPartida =>
+      widget.sala.estado == EstadoSala.finPartida;
 
   @override
   void initState() {
@@ -159,11 +164,18 @@ class _ResumenRondaScreenState extends State<ResumenRondaScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          const Flexible(
+          Flexible(
             child: FittedBox(
               fit: BoxFit.scaleDown,
               alignment: Alignment.centerLeft,
-              child: Etiqueta('como ha ido la ronda'),
+              child: Etiqueta(
+                _decideLaPartida
+                    ? 'la ronda que decide la partida'
+                    : 'como ha ido la ronda',
+                color: _decideLaPartida
+                    ? AppColors.acento
+                    : AppColors.textoTenue,
+              ),
             ),
           ),
           const Spacer(),
@@ -276,16 +288,20 @@ class _ResumenRondaScreenState extends State<ResumenRondaScreen> {
                 color: AppColors.acentoSuave,
               ),
             ),
+            if (SelloEfecto.tieneSello(jugada)) ...[
+              const SizedBox(height: 8),
+              SelloEfecto(jugada: jugada),
+            ],
             if (jugada.resultado.isNotEmpty) ...[
               const SizedBox(height: 6),
               Flexible(
                 child: Text(
                   jugada.resultado,
                   textAlign: TextAlign.center,
-                  maxLines: 3,
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                      fontSize: 12.5, height: 1.3, color: AppColors.textoSuave),
+                      fontSize: 11.5, height: 1.3, color: AppColors.textoTenue),
                 ),
               ),
             ],
@@ -314,6 +330,35 @@ class _ResumenRondaScreenState extends State<ResumenRondaScreen> {
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 13, color: AppColors.textoSuave),
           ),
+          if (_decideLaPartida) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppColors.acento.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: AppColors.acento.withValues(alpha: 0.6)),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.workspace_premium,
+                      size: 14, color: AppColors.acento),
+                  SizedBox(width: 6),
+                  Text(
+                    'Y con esto se acaba la partida',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.acento,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Flexible(
             child: SingleChildScrollView(
@@ -418,7 +463,9 @@ class _ResumenRondaScreenState extends State<ResumenRondaScreen> {
         child: _esRevelacion
             ? ElevatedButton.icon(
                 icon: const Icon(Icons.emoji_events, size: 19),
-                label: const Text('VER QUIEN GANA'),
+                label: Text(_decideLaPartida
+                    ? 'VER QUIEN GANA LA PARTIDA'
+                    : 'VER QUIEN GANA LA RONDA'),
                 onPressed: widget.onTerminar,
               )
             : OutlinedButton.icon(

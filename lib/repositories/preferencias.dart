@@ -6,6 +6,7 @@ class Preferencias {
 
   static const _claveNombre = 'nombre_jugador';
   static const _claveAviso = 'aviso_turno';
+  static const _claveMicro = 'micro_al_caer';
 
   /// El último nombre con el que entraste a una sala, o `null` si nunca has
   /// puesto ninguno en este dispositivo.
@@ -34,6 +35,24 @@ class Preferencias {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_claveAviso, activo);
+    } catch (_) {}
+  }
+
+  /// Si al quedar eliminado se abre el micrófono unos segundos para que la
+  /// sala oiga tu reacción. Viene activado; se puede apagar desde la mesa.
+  static Future<bool> microAlCaer() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool(_claveMicro) ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  static Future<void> guardarMicroAlCaer(bool activo) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_claveMicro, activo);
     } catch (_) {}
   }
 
