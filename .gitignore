@@ -44,6 +44,10 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Firma de release (keystore y credenciales, nunca en el repo)
+/android/key.properties
+/android/app/release.keystore
+
 # Cache de despliegue de Firebase Hosting
 /.firebase/
 
