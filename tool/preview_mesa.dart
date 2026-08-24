@@ -24,6 +24,27 @@ class RepoFalso extends GameRepository {
       Stream.value(jugadores);
 }
 
+/// Emite primero la mesa y, un momento después, una jugada nueva: así se
+/// ve la animación con la que se anuncia cada jugada.
+class RepoAnimado extends GameRepository {
+  final Sala inicial;
+  final Sala conJugada;
+  final List<Jugador> jugadores;
+
+  RepoAnimado(this.inicial, this.conJugada, this.jugadores);
+
+  @override
+  Stream<Sala> streamSala(String idSala) async* {
+    yield inicial;
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    yield conJugada;
+  }
+
+  @override
+  Stream<List<Jugador>> streamJugadores(String idSala) =>
+      Stream.value(jugadores);
+}
+
 Sala sala({
   int estado = EstadoSala.jugando,
   String turno = 'yo',
@@ -32,6 +53,7 @@ Sala sala({
   List<String> ganadoresRonda = const [],
   List<String> ganadoresPartida = const [],
   Map<String, dynamic>? ultimaJugada,
+  List<Map<String, dynamic>> historial = const [],
 }) {
   return Sala.fromMap('7K2P', {
     'estado': estado,
@@ -46,6 +68,7 @@ Sala sala({
     'ganadores_ronda': ganadoresRonda,
     'ganadores_partida': ganadoresPartida,
     'ultima_jugada': ultimaJugada,
+    'historial_jugadas': historial,
     'registro': const [
       'Ronda 2. Empieza Gonzalo.',
       'Marta juega 4 Escudo de Concha.',
@@ -84,7 +107,11 @@ class Marco extends StatelessWidget {
   final String titulo;
   final Sala s;
   final List<Jugador> j;
-  const Marco(this.titulo, this.s, this.j, {super.key});
+
+  /// Para los marcos que necesitan algo más que una mesa fija (animaciones).
+  final GameRepository? repo;
+
+  const Marco(this.titulo, this.s, this.j, {super.key, this.repo});
 
   @override
   Widget build(BuildContext context) {
@@ -111,7 +138,7 @@ class Marco extends StatelessWidget {
               child: GameScreen(
                 idSala: '7K2P',
                 miUid: 'yo',
-                repositorio: RepoFalso(s, j),
+                repositorio: repo ?? RepoFalso(s, j),
               ),
             ),
           ),
@@ -218,6 +245,47 @@ void main() {
                     jug('yo', 'Gonzalo', 0, mano: [10, 1], jugadas: [2, 5]),
                     jug('r1', 'Marta', 1, jugadas: [4, 3, 1], fichas: 2),
                   ],
+                ),
+                // La mesa sale 0,7 s y entonces llega la jugada, para ver la
+                // animacion con la que se anuncia (carta jugada + revelada).
+                Marco(
+                  '7. Anuncio de jugada',
+                  sala(turno: 'r2'),
+                  mesa,
+                  repo: RepoAnimado(
+                    sala(turno: 'r2'),
+                    sala(turno: 'r2', ultimaJugada: const {
+                      'uid': 'r1',
+                      'nombre': 'Marta',
+                      'carta': 5,
+                      'resultado': 'Marta obliga a Lucia a bajar su 10 Rey '
+                          'del Trono sin efecto.',
+                      'reveladas': [
+                        {
+                          'uid': 'r3',
+                          'nombre': 'Lucia',
+                          'carta': 10,
+                          'motivo': 'forzada',
+                        },
+                      ],
+                    }, historial: const [
+                      {
+                        'uid': 'r1',
+                        'nombre': 'Marta',
+                        'carta': 5,
+                        'resultado': 'Marta obliga a Lucia a bajar su 10.',
+                        'reveladas': [
+                          {
+                            'uid': 'r3',
+                            'nombre': 'Lucia',
+                            'carta': 10,
+                            'motivo': 'forzada',
+                          },
+                        ],
+                      },
+                    ]),
+                    mesa,
+                  ),
                 ),
               ],
             ),
