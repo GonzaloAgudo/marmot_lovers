@@ -6,6 +6,7 @@ import '../models/sala.dart';
 import '../theme/app_theme.dart';
 import '../widgets/carta_widget.dart';
 import '../widgets/confeti.dart';
+import '../widgets/medalla_puesto.dart';
 
 /// Pantalla de fin de ronda / fin de partida.
 ///
@@ -107,11 +108,25 @@ class _PantallaResultadoState extends State<PantallaResultado>
     final ganadores = _ganadores;
 
     final ordenados = [...widget.jugadores]..sort((a, b) {
+        final porFichas = b.fichasVictoria.compareTo(a.fichasVictoria);
+        if (porFichas != 0) return porFichas;
+        // A igualdad de fichas, delante quien acaba de ganar la ronda.
         final ga = ganadores.contains(a.nombre) ? 0 : 1;
         final gb = ganadores.contains(b.nombre) ? 0 : 1;
-        if (ga != gb) return ga - gb;
-        return b.fichasVictoria.compareTo(a.fichasVictoria);
+        return ga - gb;
       });
+
+    // Puesto de cada uno: con las mismas fichas se comparte puesto, y el
+    // siguiente salta (1, 2, 2, 4...), como en cualquier clasificacion.
+    final puestos = <String, int>{};
+    for (var i = 0; i < ordenados.length; i++) {
+      final j = ordenados[i];
+      if (i > 0 && ordenados[i - 1].fichasVictoria == j.fichasVictoria) {
+        puestos[j.uid] = puestos[ordenados[i - 1].uid]!;
+      } else {
+        puestos[j.uid] = i + 1;
+      }
+    }
 
     return Scaffold(
       body: MesaFondo(
@@ -226,7 +241,8 @@ class _PantallaResultadoState extends State<PantallaResultado>
                                   (0.55 + i * 0.09).clamp(0.0, 0.94);
                               return _apareciendo(
                                 _tramo(desde, (desde + 0.14).clamp(0.0, 1.0)),
-                                _filaResultado(ordenados[i], ganadores),
+                                _filaResultado(ordenados[i], ganadores,
+                                    puestos[ordenados[i].uid] ?? i + 1),
                               );
                             }),
                             const SizedBox(height: 12),
@@ -331,7 +347,7 @@ class _PantallaResultadoState extends State<PantallaResultado>
     );
   }
 
-  Widget _filaResultado(Jugador j, List<String> ganadores) {
+  Widget _filaResultado(Jugador j, List<String> ganadores, int puesto) {
     final gano = ganadores.contains(j.nombre);
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -412,8 +428,7 @@ class _PantallaResultadoState extends State<PantallaResultado>
               ],
             ),
           ),
-          if (gano)
-            const Icon(Icons.emoji_events, color: AppColors.acento, size: 22),
+          MedallaPuesto(puesto: puesto, altura: gano ? 62 : 50),
         ],
       ),
     );

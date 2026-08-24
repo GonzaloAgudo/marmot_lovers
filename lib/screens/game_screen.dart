@@ -345,8 +345,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 spacing: 8,
                 runSpacing: 8,
                 alignment: WrapAlignment.center,
-                children: List.generate(10, (i) {
-                  final numero = i + 1;
+                children: List.generate(11, (i) {
+                  // Del 0 al 10: El Capo de la Colonia tambien esta en el
+                  // mazo y se puede adivinar.
+                  final numero = i;
                   return GestureDetector(
                     onTap: () {
                       Navigator.pop(sheetContext);

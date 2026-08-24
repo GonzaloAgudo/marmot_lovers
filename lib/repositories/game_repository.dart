@@ -604,7 +604,7 @@ class GameRepository {
             if (objetivo != null) {
               // Regla de la casa: aqui SI se puede adivinar el 1.
               if (adivinanza == null || adivinanza < 0 || adivinanza > 10) {
-                return 'Tienes que adivinar un numero del 1 al 10';
+                return 'Tienes que adivinar un numero del 0 al 10';
               }
               final suCarta = objetivo.carta;
               if (suCarta == adivinanza) {

@@ -19,7 +19,7 @@ Mazo de 21 cartas:
 | 4 | La Sabia del Valle | 2 | Te protege hasta tu siguiente turno |
 | 3 | El Matón del Campo de Batalla | 3 | Comparas carta con un rival; pierde el más bajo |
 | 2 | El Correvvidile | 3 | Miras la carta superior y la devuelves donde quieras |
-| 1 | La Pitonisa de los Túneles | 5 | Adivinas la carta de un rival (**del 1 al 10**, regla de la casa) |
+| 1 | La Pitonisa de los Túneles | 5 | Adivinas la carta de un rival (**del 0 al 10**, regla de la casa) |
 | 0 | El Capo de la Colonia | 1 | Al final de la ronda gana al Rey del Trono (10), y solo a él |
 
 Los nombres son los que están impresos en `assets/cards/clasico/`.
@@ -32,8 +32,8 @@ Los nombres son los que están impresos en `assets/cards/clasico/`.
 - La primera ronda la empieza un jugador **al azar**; las siguientes las
   empieza quien ganó la ronda anterior.
 
-**Regla de la casa:** con La Pitonisa (1) se puede adivinar también el 1, cosa
-que el reglamento original no permite.
+**Regla de la casa:** con La Pitonisa (1) se puede adivinar cualquier carta del 0 al 10,
+incluido el 1, cosa que el reglamento original no permite.
 
 ### Jugando en persona
 
