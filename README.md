@@ -88,9 +88,29 @@ como texto en el registro.
 
 ### Aviso de turno
 
-Cuando el turno pasa a ser tuyo, el móvil vibra (dos toques) y los bordes de
-la pantalla dan un par de destellos ámbar. Se puede silenciar con la campana
-de la barra superior y la elección se recuerda.
+Cuando el turno pasa a ser tuyo, el móvil vibra (dos toques) y los bordes de la
+pantalla dan un par de destellos ámbar. Se puede silenciar con la campana de
+la barra superior y la elección se recuerda.
+
+### Anuncio de la jugada
+
+Cuando alguien juega una carta, la mesa se cubre un momento con el anuncio:
+la carta jugada entra volteándose, con el nombre de quién la bajó, y después
+salen de una en una las cartas que el efecto ha revelado **en público**:
+
+- el **5** (Rey de las Mareas): la carta que el rival baja forzado;
+- el **3** (Matón): solo la del eliminado (la del ganador sigue siendo
+  secreta, y si empatan no sale ninguna);
+- el **1** (Pitonisa): si acierta, la del eliminado; si falla, nada;
+- el **10** (Rey del Trono): también la otra carta de su mano, que queda
+  boca arriba al ser eliminado.
+
+Los intercambios (8 y 9) y el reparto del 7 siguen siendo secretos. El
+anuncio avanza solo y se salta tocando en cualquier sitio; si llegan varias
+jugadas seguidas, se anuncian por orden. El motor apunta esas cartas en
+`ultima_jugada.reveladas` (y con ellas se rellena `historial_jugadas`), así
+que el dato queda guardado por si el repaso de fin de ronda quiere enseñarlas
+más adelante.
 
 ### En la mesa
 

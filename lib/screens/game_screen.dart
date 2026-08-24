@@ -7,6 +7,7 @@ import '../models/sala.dart';
 import '../repositories/game_repository.dart';
 import '../repositories/preferencias.dart';
 import '../theme/app_theme.dart';
+import '../widgets/animacion_jugada.dart';
 import '../widgets/asiento_widget.dart';
 import '../widgets/aviso_turno.dart';
 import '../widgets/carta_widget.dart';
@@ -49,6 +50,13 @@ class _GameScreenState extends State<GameScreen>
   /// Si ya se ha visto (o saltado) el repaso de esta ronda. Se pone a false
   /// en cuanto se vuelve a jugar, para que salga en cada ronda.
   bool _repasoHecho = false;
+
+  /// Cuántas jugadas del historial se han anunciado ya con la animación.
+  /// Cuando el historial crece por encima, se enseña la siguiente; cuando
+  /// se reinicia (nueva ronda), vuelve a cero sin animar nada viejo.
+  /// `null` hasta el primer snapshot: así al abrir la pantalla no se animan
+  /// jugadas que ya estaban.
+  int? _jugadasAnunciadas;
 
   /// Los streams se crean UNA vez. Si se llamara al repositorio dentro de
   /// build(), cada cambio de la sala abriria una suscripcion nueva a
@@ -582,6 +590,40 @@ class _GameScreenState extends State<GameScreen>
     );
   }
 
+  /// Devuelve el anuncio de la jugada que acaba de pasar, o `null` si no hay
+  /// ninguna nueva que enseñar.
+  ///
+  /// Va una carta por turno: si llegan varias seguidas (rival muy rápido),
+  /// se anuncian de una en una al cerrar cada una.
+  Widget? _anuncioDeJugada(Sala sala, List<Jugador> jugadores) {
+    final historial = sala.historial;
+
+    if (_jugadasAnunciadas == null || historial.length < _jugadasAnunciadas!) {
+      // Primera vez, o nueva ronda: se sincroniza sin animar nada viejo.
+      _jugadasAnunciadas = historial.length;
+      return null;
+    }
+    if (_jugadasAnunciadas! >= historial.length) return null;
+
+    final jugada = historial[_jugadasAnunciadas!];
+    return AnimacionJugada(
+      // Clave con el índice: al avanzar se crea un estado nuevo y la
+      // secuencia empieza desde el volteo.
+      key: ValueKey('anuncio-${sala.ronda}-$_jugadasAnunciadas'),
+      jugada: jugada,
+      colorDe: (uid) {
+        final quien = _buscar(jugadores, uid);
+        return quien == null
+            ? AppColors.textoSuave
+            : AppColors.asiento(quien.orden);
+      },
+      onTerminar: () {
+        if (!mounted) return;
+        setState(() => _jugadasAnunciadas = _jugadasAnunciadas! + 1);
+      },
+    );
+  }
+
   // ==========================================================
   // MESA
   // ==========================================================
@@ -590,6 +632,8 @@ class _GameScreenState extends State<GameScreen>
     // Se esta jugando: el repaso de la ronda que acabe habra que verlo.
     _repasoHecho = false;
     _vigilarTurno(sala, yo);
+
+    final animacion = _anuncioDeJugada(sala, jugadores);
 
     final rivales = jugadores.where((j) => j.uid != widget.miUid).toList();
     final esMiTurno = sala.turnoActual == widget.miUid;
@@ -686,6 +730,7 @@ class _GameScreenState extends State<GameScreen>
                         _capaRevelacion(yo)
                       else if (yo.accionPendiente != null)
                         _capaPendiente(sala, yo),
+                      ?animacion,
                       Positioned.fill(
                         child: DestelloTurno(animacion: _destello),
                       ),

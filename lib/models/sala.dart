@@ -7,6 +7,53 @@ class EstadoSala {
   static const int finPartida = 3;
 }
 
+/// Una carta que quedó a la vista de todos como consecuencia de una jugada.
+///
+/// Solo información pública: la carta forzada por El Rey de las Mareas (5),
+/// la del eliminado por El Matón (3) o La Pitonisa (1) si acierta, y la que
+/// queda boca arriba al bajar al Rey del Trono (10). Los intercambios y las
+/// comparaciones ganadas siguen siendo secretos.
+class CartaRevelada {
+  final String uid;
+  final String nombre;
+  final int carta;
+
+  /// Por qué es pública: 'forzada' (carta 5) o 'eliminada' (1, 3 y 10).
+  final String motivo;
+
+  const CartaRevelada({
+    required this.uid,
+    required this.nombre,
+    required this.carta,
+    required this.motivo,
+  });
+
+  static CartaRevelada? fromMap(Map<String, dynamic>? data) {
+    if (data == null) return null;
+    final carta = (data['carta'] as num?)?.toInt();
+    if (carta == null) return null;
+    return CartaRevelada(
+      uid: data['uid'] as String? ?? '',
+      nombre: data['nombre'] as String? ?? '',
+      carta: carta,
+      motivo: data['motivo'] as String? ?? '',
+    );
+  }
+
+  static List<CartaRevelada> listaDesde(dynamic v) =>
+      ((v as List?) ?? const [])
+          .map((e) => fromMap((e as Map).cast<String, dynamic>()))
+          .whereType<CartaRevelada>()
+          .toList();
+
+  Map<String, dynamic> toMap() => {
+        'uid': uid,
+        'nombre': nombre,
+        'carta': carta,
+        'motivo': motivo,
+      };
+}
+
 /// La última carta que se ha puesto boca arriba sobre la mesa, para poder
 /// enseñarla en grande a todo el mundo.
 class UltimaJugada {
@@ -17,11 +64,15 @@ class UltimaJugada {
   /// Qué pasó al jugarla, en una frase.
   final String resultado;
 
+  /// Cartas que quedaron a la vista de todos como consecuencia, en orden.
+  final List<CartaRevelada> reveladas;
+
   const UltimaJugada({
     required this.uid,
     required this.nombre,
     required this.carta,
     required this.resultado,
+    this.reveladas = const [],
   });
 
   static UltimaJugada? fromMap(Map<String, dynamic>? data) {
@@ -33,6 +84,7 @@ class UltimaJugada {
       nombre: data['nombre'] as String? ?? '',
       carta: carta,
       resultado: data['resultado'] as String? ?? '',
+      reveladas: CartaRevelada.listaDesde(data['reveladas']),
     );
   }
 
@@ -41,6 +93,7 @@ class UltimaJugada {
         'nombre': nombre,
         'carta': carta,
         'resultado': resultado,
+        'reveladas': reveladas.map((r) => r.toMap()).toList(),
       };
 }
 

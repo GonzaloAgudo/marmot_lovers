@@ -551,6 +551,10 @@ class GameRepository {
         // carta: sirve para contar en la mesa que ha pasado.
         final marcaRegistro = registro.length;
 
+        // Cartas que quedan a la vista de todos como consecuencia del
+        // efecto, para anunciarlas en la mesa junto a la carta jugada.
+        final reveladas = <CartaRevelada>[];
+
         // Objetivos validos: vivos, que no sea yo, y que no esten protegidos.
         final objetivosLegales = estados
             .where((p) => p.uid != miUid && p.vivo && !p.protegido)
@@ -581,12 +585,19 @@ class GameRepository {
               if (adivinanza == null || adivinanza < 0 || adivinanza > 10) {
                 return 'Tienes que adivinar un numero del 1 al 10';
               }
-              if (objetivo.carta == adivinanza) {
+              final suCarta = objetivo.carta;
+              if (suCarta == adivinanza) {
                 _log(
                     registro,
                     '${yo.nombre} adivina que ${objetivo.nombre} tenia un '
                     '$adivinanza: acierta y queda eliminado.');
                 objetivo.eliminar();
+                reveladas.add(CartaRevelada(
+                  uid: objetivo.uid,
+                  nombre: objetivo.nombre,
+                  carta: suCarta,
+                  motivo: 'eliminada',
+                ));
               } else {
                 _log(
                     registro,
@@ -610,24 +621,39 @@ class GameRepository {
 
           case 3: // El Maton: comparar cartas.
             if (objetivo != null) {
+              final suCarta = objetivo.carta;
               yo.revelaciones.add(
-                  'El Maton: tu $retenida contra el ${objetivo.carta} '
+                  'El Maton: tu $retenida contra el $suCarta '
                   'de ${objetivo.nombre}.');
               objetivo.revelaciones.add(
                   'El Maton: ${yo.nombre} comparo su $retenida con tu '
-                  '${objetivo.carta}.');
-              if (retenida > objetivo.carta) {
+                  '$suCarta.');
+              if (retenida > suCarta) {
                 _log(
                     registro,
                     '${yo.nombre} gana la comparacion: ${objetivo.nombre} '
-                    'queda eliminado con un ${objetivo.carta}.');
+                    'queda eliminado con un $suCarta.');
                 objetivo.eliminar();
-              } else if (retenida < objetivo.carta) {
+                // La comparacion es secreta: solo trasciende la carta del
+                // eliminado.
+                reveladas.add(CartaRevelada(
+                  uid: objetivo.uid,
+                  nombre: objetivo.nombre,
+                  carta: suCarta,
+                  motivo: 'eliminada',
+                ));
+              } else if (retenida < suCarta) {
                 _log(
                     registro,
                     '${objetivo.nombre} gana la comparacion: ${yo.nombre} '
                     'queda eliminado con un $retenida.');
                 yo.eliminar();
+                reveladas.add(CartaRevelada(
+                  uid: miUid,
+                  nombre: yo.nombre,
+                  carta: retenida,
+                  motivo: 'eliminada',
+                ));
               } else {
                 _log(registro,
                     '${yo.nombre} y ${objetivo.nombre} empatan: no pasa nada.');
@@ -646,6 +672,12 @@ class GameRepository {
               final forzada = objetivo.carta;
               objetivo.mano.clear();
               objetivo.jugadas.add(forzada);
+              reveladas.add(CartaRevelada(
+                uid: objetivo.uid,
+                nombre: objetivo.nombre,
+                carta: forzada,
+                motivo: 'forzada',
+              ));
               _log(
                   registro,
                   '${yo.nombre} obliga a ${objetivo.nombre} a bajar su '
@@ -743,6 +775,16 @@ class GameRepository {
             _log(registro,
                 '${yo.nombre} baja al Rey del Trono y queda eliminado al instante.');
             yo.eliminar();
+            // Al quedar eliminado, la otra carta de la mano se queda boca
+            // arriba delante de el.
+            if (retenida != -1) {
+              reveladas.add(CartaRevelada(
+                uid: miUid,
+                nombre: yo.nombre,
+                carta: retenida,
+                motivo: 'eliminada',
+              ));
+            }
             break;
         }
 
@@ -756,6 +798,7 @@ class GameRepository {
           resultado: registro.length > marcaRegistro
               ? registro.sublist(marcaRegistro).join(' ')
               : '',
+          reveladas: reveladas,
         );
 
         final salaUpdate = <String, dynamic>{
@@ -1052,6 +1095,9 @@ class GameRepository {
         resultado: [anterior, jugada.resultado]
             .where((t) => t.isNotEmpty)
             .join(' '),
+        // Las cartas reveladas se apuntaron al jugar; al completar la
+        // jugada no cambian, pero hay que conservarlas.
+        reveladas: CartaRevelada.listaDesde(lista.last['reveladas']),
       ).toMap();
       return lista;
     }
