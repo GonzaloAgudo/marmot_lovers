@@ -10,7 +10,7 @@ import 'package:marmot_lovers/providers/style_provider.dart';
 import 'package:marmot_lovers/repositories/game_repository.dart';
 import 'package:marmot_lovers/screens/game_screen.dart';
 import 'package:marmot_lovers/theme/app_theme.dart';
-import 'package:marmot_lovers/widgets/animacion_jugada.dart';
+import 'package:marmot_lovers/widgets/anuncio_jugada.dart';
 import 'package:marmot_lovers/widgets/carta_widget.dart';
 
 /// Repo de mentira con streams que se alimentan a mano, para simular que
@@ -135,7 +135,7 @@ Future<void> _volteo(WidgetTester t) =>
 /// Cartas boca arriba y grandes (las del anuncio, no las de la mesa).
 int _carasGrandes(WidgetTester t, int valor) => t
     .widgetList<CartaWidget>(find.descendant(
-      of: find.byType(AnimacionJugada),
+      of: find.byType(AnuncioJugada),
       matching: find.byType(CartaWidget),
     ))
     .where((c) => c.valor == valor && c.altura > 100)
@@ -186,7 +186,7 @@ void main() {
         _jugadores(),
       );
       await t.pump(const Duration(milliseconds: 2500));
-      expect(find.byType(AnimacionJugada), findsNothing);
+      expect(find.byType(AnuncioJugada), findsNothing);
       expect(t.takeException(), isNull);
     });
 
@@ -196,7 +196,7 @@ void main() {
       await _pantalla(t, repo);
 
       await _emitir(t, repo, _sala(), _jugadores());
-      expect(find.byType(AnimacionJugada), findsNothing);
+      expect(find.byType(AnuncioJugada), findsNothing);
 
       await _emitir(
         t,
@@ -206,8 +206,8 @@ void main() {
       );
       await _volteo(t);
 
-      expect(find.byType(AnimacionJugada), findsOneWidget);
-      final anuncio = find.byType(AnimacionJugada);
+      expect(find.byType(AnuncioJugada), findsOneWidget);
+      final anuncio = find.byType(AnuncioJugada);
       expect(find.descendant(of: anuncio, matching: find.text('Marta juega')),
           findsOneWidget);
       expect(
@@ -217,9 +217,9 @@ void main() {
       );
       expect(_carasGrandes(t, 5), 1);
 
-      await t.tap(find.byType(AnimacionJugada));
+      await t.tap(find.byType(AnuncioJugada));
       await t.pump();
-      expect(find.byType(AnimacionJugada), findsNothing);
+      expect(find.byType(AnuncioJugada), findsNothing);
       expect(t.takeException(), isNull);
     });
 
@@ -239,14 +239,14 @@ void main() {
       // Paso 1: la carta forzada de Javi, volteándose desde el dorso.
       await t.pump(const Duration(milliseconds: 1900));
       await _volteo(t);
-      expect(find.byType(AnimacionJugada), findsOneWidget);
+      expect(find.byType(AnuncioJugada), findsOneWidget);
       expect(find.text('BAJA SU CARTA SIN EFECTO'), findsOneWidget);
       expect(find.text('Javi revela'), findsOneWidget);
       expect(_carasGrandes(t, 3), 1);
 
       // Paso 2: se cierra sola al acabarse la secuencia.
       await t.pump(const Duration(milliseconds: 1900));
-      expect(find.byType(AnimacionJugada), findsNothing);
+      expect(find.byType(AnuncioJugada), findsNothing);
       expect(t.takeException(), isNull);
     });
 
@@ -269,16 +269,16 @@ void main() {
 
       // Primero la de Marta.
       expect(find.text('Marta juega'), findsOneWidget);
-      await t.tap(find.byType(AnimacionJugada));
+      await t.tap(find.byType(AnuncioJugada));
       await t.pump();
       await _volteo(t);
 
       // Después la de Javi.
-      expect(find.byType(AnimacionJugada), findsOneWidget);
+      expect(find.byType(AnuncioJugada), findsOneWidget);
       expect(find.text('Javi juega'), findsOneWidget);
-      await t.tap(find.byType(AnimacionJugada));
+      await t.tap(find.byType(AnuncioJugada));
       await t.pump();
-      expect(find.byType(AnimacionJugada), findsNothing);
+      expect(find.byType(AnuncioJugada), findsNothing);
       expect(t.takeException(), isNull);
     });
 
@@ -293,13 +293,13 @@ void main() {
         _sala(historial: const [_jugadaMarta], ultimaJugada: _jugadaMarta),
         _jugadores(),
       );
-      await t.tap(find.byType(AnimacionJugada));
+      await t.tap(find.byType(AnuncioJugada));
       await t.pump();
 
       // Nueva ronda: el historial se reinicia y no salta nada viejo.
       await _emitir(t, repo, _sala(ronda: 3, turno: 'yo'), _jugadores());
       await t.pump(const Duration(milliseconds: 2500));
-      expect(find.byType(AnimacionJugada), findsNothing);
+      expect(find.byType(AnuncioJugada), findsNothing);
 
       // Y la primera jugada de la ronda nueva sí se anuncia.
       await _emitir(
@@ -312,7 +312,7 @@ void main() {
         ),
         _jugadores(),
       );
-      expect(find.byType(AnimacionJugada), findsOneWidget);
+      expect(find.byType(AnuncioJugada), findsOneWidget);
       expect(t.takeException(), isNull);
     });
 
@@ -333,7 +333,7 @@ void main() {
           _jugadores(),
         );
         await _volteo(t);
-        expect(find.byType(AnimacionJugada), findsOneWidget);
+        expect(find.byType(AnuncioJugada), findsOneWidget);
 
         // También con la carta revelada en pantalla.
         await t.pump(const Duration(milliseconds: 1900));

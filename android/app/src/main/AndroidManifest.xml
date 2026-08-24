@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Necesario para hablar con Firebase tambien en las builds de release. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Al quedar eliminado se abren 5 segundos de micro para que la sala
+         oiga tu reaccion. Se puede desactivar dentro de la partida. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 
     <application
         android:label="Marmot Lovers"

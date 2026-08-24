@@ -1,6 +1,3 @@
-import 'dart:async';
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../models/carta.dart';
@@ -8,242 +5,270 @@ import '../models/sala.dart';
 import '../theme/app_theme.dart';
 import 'carta_widget.dart';
 
-/// Anuncio temporal de una jugada: cubre la mesa un momento para que todos
-/// vean qué ha pasado.
+/// Cómo se dibuja cada efecto: icono, color y frase corta.
+class _Pinta {
+  final IconData icono;
+  final Color color;
+  final String Function(UltimaJugada) texto;
+  const _Pinta(this.icono, this.color, this.texto);
+}
+
+final Map<String, _Pinta> _pintas = {
+  Efecto.eliminado: _Pinta(
+    Icons.dangerous,
+    AppColors.peligro,
+    (j) => '${j.objetivoNombre ?? "Alguien"} fuera',
+  ),
+  Efecto.autoEliminado: _Pinta(
+    Icons.dangerous,
+    AppColors.peligro,
+    (j) => '${j.nombre} se elimina',
+  ),
+  Efecto.protegido: _Pinta(
+    Icons.shield,
+    AppColors.escudo,
+    (j) => '${j.nombre} se protege',
+  ),
+  Efecto.intercambio: _Pinta(
+    Icons.swap_horiz,
+    AppColors.secreto,
+    (j) => 'Cartas cambiadas',
+  ),
+  Efecto.fallo: _Pinta(
+    Icons.block,
+    AppColors.textoSuave,
+    (j) => 'Falla',
+  ),
+  Efecto.mirada: _Pinta(
+    Icons.visibility,
+    AppColors.secreto,
+    (j) => 'Mira en secreto',
+  ),
+  Efecto.rebarajado: _Pinta(
+    Icons.shuffle,
+    AppColors.acentoSuave,
+    (j) => 'Se reparte de nuevo',
+  ),
+  Efecto.forzado: _Pinta(
+    Icons.pan_tool,
+    AppColors.acento,
+    (j) => '${j.objetivoNombre ?? "Alguien"} baja su carta',
+  ),
+};
+
+/// Anima la jugada que acaba de pasar en el centro de la mesa.
 ///
-/// Enseña primero la carta jugada (volteándose) y después, de una en una,
-/// las cartas que el efecto ha revelado en público. Avanza sola y se puede
-/// saltar tocando en cualquier sitio.
-class AnimacionJugada extends StatefulWidget {
+/// La carta entra girando, y si la jugada le hace algo a alguien sale
+/// después el efecto (calavera, escudo, intercambio...) hacia ese jugador.
+/// La idea es que se entienda de un vistazo, sin leer.
+class AnimacionJugada extends StatelessWidget {
   final UltimaJugada jugada;
-
-  /// Color del asiento de cada jugador, para el punto de su nombre.
-  final Color Function(String uid) colorDe;
-
-  /// Se llama cuando la secuencia termina (sola o por un toque).
-  final VoidCallback onTerminar;
-
-  /// Cuánto se queda cada carta en pantalla antes de pasar a la siguiente.
-  final Duration ritmo;
+  final Animation<double> animacion;
+  final Color colorJugador;
+  final double altoCarta;
+  final VoidCallback? onVerCarta;
 
   const AnimacionJugada({
     super.key,
     required this.jugada,
-    required this.colorDe,
-    required this.onTerminar,
-    this.ritmo = const Duration(milliseconds: 1900),
+    required this.animacion,
+    required this.colorJugador,
+    required this.altoCarta,
+    this.onVerCarta,
   });
 
   @override
-  State<AnimacionJugada> createState() => _AnimacionJugadaState();
-}
-
-class _AnimacionJugadaState extends State<AnimacionJugada> {
-  /// Paso de la secuencia: 0 = la carta jugada; el resto, cada revelada.
-  int _paso = 0;
-  Timer? _reloj;
-
-  int get _totalPasos => 1 + widget.jugada.reveladas.length;
-
-  @override
-  void initState() {
-    super.initState();
-    _programar();
-  }
-
-  @override
-  void dispose() {
-    _reloj?.cancel();
-    super.dispose();
-  }
-
-  void _programar() {
-    _reloj?.cancel();
-    _reloj = Timer(widget.ritmo, () {
-      if (!mounted) return;
-      if (_paso + 1 >= _totalPasos) {
-        widget.onTerminar();
-        return;
-      }
-      setState(() => _paso++);
-      _programar();
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Positioned.fill(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTerminar,
-        child: Container(
-          color: Colors.black.withValues(alpha: 0.66),
-          padding: const EdgeInsets.all(24),
-          child: LayoutBuilder(
-            builder: (context, restricciones) {
-              final altoCarta =
-                  (restricciones.maxHeight * 0.36).clamp(110.0, 240.0);
+    final pinta = _pintas[jugada.efecto];
 
-              return Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+    return AnimatedBuilder(
+      animation: animacion,
+      builder: (context, _) {
+        final t = animacion.value;
+
+        // La carta entra en el primer tercio; el efecto sale después.
+        final entrada = Curves.easeOutBack.transform((t / 0.35).clamp(0.0, 1.0));
+        final salida = ((t - 0.4) / 0.6).clamp(0.0, 1.0);
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Transform.translate(
+              offset: Offset(-40 * (1 - entrada), 0),
+              child: Transform.rotate(
+                angle: -0.35 * (1 - entrada),
+                child: Opacity(
+                  opacity: entrada.clamp(0.0, 1.0),
+                  child: CartaWidget(
+                    valor: jugada.carta,
+                    altura: altoCarta,
+                    onTap: onVerCarta,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Flexible(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 340),
-                      switchInCurve: Curves.easeOutBack,
-                      transitionBuilder: (hijo, animacion) => FadeTransition(
-                        opacity: animacion,
-                        child: ScaleTransition(
-                          scale: Tween<double>(begin: 0.86, end: 1)
-                              .animate(animacion),
-                          child: hijo,
-                        ),
-                      ),
-                      child: _paso == 0
-                          ? _cartaJugada(altoCarta)
-                          : _cartaRevelada(
-                              widget.jugada.reveladas[_paso - 1], altoCarta),
+                  _quien(entrada),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${jugada.carta}  ${Cartas.nombreCorto(jugada.carta)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.acentoSuave,
                     ),
                   ),
-                  const SizedBox(height: 22),
-                  const Text(
-                    'toca para saltar',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textoTenue,
-                    ),
-                  ),
+                  if (pinta != null) ...[
+                    const SizedBox(height: 8),
+                    _sello(pinta, salida),
+                  ],
                 ],
-              );
-            },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _quien(double entrada) {
+    return Opacity(
+      opacity: entrada.clamp(0.0, 1.0),
+      child: Row(
+        children: [
+          Container(
+            width: 8,
+            height: 8,
+            decoration:
+                BoxDecoration(shape: BoxShape.circle, color: colorJugador),
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              jugada.nombre,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style:
+                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// El efecto: entra desde la carta, da un golpe y se queda.
+  Widget _sello(_Pinta pinta, double t) {
+    if (t <= 0) return const SizedBox(height: 26);
+
+    // Rebote: se pasa de tamaño y vuelve.
+    final escala = t < 0.35
+        ? 0.4 + (t / 0.35) * 0.85
+        : 1.25 - ((t - 0.35) / 0.65) * 0.25;
+
+    return Opacity(
+      opacity: (t * 2.5).clamp(0.0, 1.0),
+      child: Transform.translate(
+        offset: Offset(-26 * (1 - t.clamp(0.0, 1.0)), 0),
+        child: Transform.scale(
+          scale: escala.clamp(0.4, 1.3),
+          alignment: Alignment.centerLeft,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+            decoration: BoxDecoration(
+              color: pinta.color.withValues(alpha: 0.16),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: pinta.color.withValues(alpha: 0.7)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(pinta.icono, size: 14, color: pinta.color),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    pinta.texto(jugada),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                      color: pinta.color,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
-
-  Widget _cabecera(String nombre, String verbo, Color color) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(shape: BoxShape.circle, color: color),
-        ),
-        const SizedBox(width: 8),
-        Flexible(
-          child: Text(
-            '$nombre $verbo',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _rotuloCarta(int valor) => Text(
-        '$valor  ${Cartas.nombreCorto(valor)}',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(
-          fontSize: 13.5,
-          fontWeight: FontWeight.w800,
-          color: AppColors.acentoSuave,
-        ),
-      );
-
-  Widget _cartaJugada(double altoCarta) {
-    final jugada = widget.jugada;
-    return Column(
-      key: const ValueKey('jugada'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _cabecera(jugada.nombre, 'juega', widget.colorDe(jugada.uid)),
-        const SizedBox(height: 14),
-        _CartaVolteada(valor: jugada.carta, altura: altoCarta),
-        const SizedBox(height: 10),
-        _rotuloCarta(jugada.carta),
-      ],
-    );
-  }
-
-  Widget _cartaRevelada(CartaRevelada revelada, double altoCarta) {
-    final forzada = revelada.motivo == 'forzada';
-    return Column(
-      key: ValueKey('revelada-$_paso'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Etiqueta(
-          forzada ? 'baja su carta sin efecto' : 'queda eliminado',
-          color: forzada ? AppColors.acento : AppColors.peligro,
-        ),
-        const SizedBox(height: 10),
-        _cabecera(
-          revelada.nombre,
-          forzada ? 'revela' : 'revela su carta',
-          widget.colorDe(revelada.uid),
-        ),
-        const SizedBox(height: 14),
-        _CartaVolteada(valor: revelada.carta, altura: altoCarta),
-        const SizedBox(height: 10),
-        _rotuloCarta(revelada.carta),
-      ],
-    );
-  }
 }
 
-/// Carta que entra volteándose: enseña el dorso y acaba mostrando el valor.
-class _CartaVolteada extends StatefulWidget {
-  final int valor;
-  final double altura;
+/// El sello de un efecto, quieto. Para sitios donde no hace falta animarlo,
+/// como el repaso de la ronda.
+class SelloEfecto extends StatelessWidget {
+  final UltimaJugada jugada;
+  final double escala;
 
-  const _CartaVolteada({required this.valor, required this.altura});
+  const SelloEfecto({super.key, required this.jugada, this.escala = 1});
 
-  @override
-  State<_CartaVolteada> createState() => _CartaVolteadaState();
-}
-
-class _CartaVolteadaState extends State<_CartaVolteada>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _giro = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 560),
-  )..forward();
-
-  @override
-  void dispose() {
-    _giro.dispose();
-    super.dispose();
-  }
+  /// `true` si esta jugada tiene algo que enseñar.
+  static bool tieneSello(UltimaJugada jugada) =>
+      _pintas.containsKey(jugada.efecto);
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _giro,
-      builder: (context, _) {
-        final t = Curves.easeInOut.transform(_giro.value);
-        // Primera mitad: el dorso gira hasta quedarse de canto; segunda
-        // mitad: el valor termina de girar hasta quedar plano.
-        final mostrandoDorso = t < 0.5;
-        final angulo = (mostrandoDorso ? t : 1 - t) * math.pi;
+    final pinta = _pintas[jugada.efecto];
+    if (pinta == null) return const SizedBox.shrink();
 
-        return Transform.scale(
-          scale: 0.94 + 0.06 * t,
-          child: Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.identity()
-              ..setEntry(3, 2, 0.0016)
-              ..rotateY(angulo),
-            child: CartaWidget(
-              valor: mostrandoDorso ? null : widget.valor,
-              altura: widget.altura,
+    return Container(
+      padding: EdgeInsets.symmetric(
+          horizontal: 11 * escala, vertical: 6 * escala),
+      decoration: BoxDecoration(
+        color: pinta.color.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: pinta.color.withValues(alpha: 0.7)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(pinta.icono, size: 15 * escala, color: pinta.color),
+          SizedBox(width: 6 * escala),
+          Flexible(
+            child: Text(
+              pinta.texto(jugada),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12 * escala,
+                fontWeight: FontWeight.w800,
+                color: pinta.color,
+              ),
             ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
+}
+
+/// Reacción del asiento del jugador al que le acaba de pasar algo.
+enum ReaccionAsiento { ninguna, golpe, escudo, cambio }
+
+extension ReaccionDeEfecto on String {
+  ReaccionAsiento get reaccion => switch (this) {
+        Efecto.eliminado || Efecto.autoEliminado => ReaccionAsiento.golpe,
+        Efecto.protegido => ReaccionAsiento.escudo,
+        Efecto.intercambio => ReaccionAsiento.cambio,
+        _ => ReaccionAsiento.ninguna,
+      };
 }

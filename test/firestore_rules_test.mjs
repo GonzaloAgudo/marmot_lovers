@@ -91,6 +91,20 @@ await prueba('con sesion si se puede leer y jugar',
     await assertSucceeds(updateDoc(doc(ana, 'salas', 'VIVA'), { estado: 2 }));
   });
 
+await prueba('con sesion se puede dejar una reaccion de voz',
+  () => assertSucceeds(setDoc(doc(ana, 'salas', 'VIVA', 'audios', 'a1'),
+    { uid: 'ana', nombre: 'Ana', datos: 'AAAA', formato: 'm4a' })));
+
+await prueba('con sesion se pueden oir las reacciones',
+  () => assertSucceeds(getDoc(doc(ana, 'salas', 'VIVA', 'audios', 'a1'))));
+
+await prueba('sin sesion no se puede oir ni dejar voz',
+  async () => {
+    await assertFails(getDoc(doc(anon, 'salas', 'VIVA', 'audios', 'a1')));
+    await assertFails(setDoc(doc(anon, 'salas', 'VIVA', 'audios', 'a2'),
+      { uid: 'x', datos: 'AAAA' }));
+  });
+
 await prueba('se pueden borrar los jugadores de la sala',
   () => assertSucceeds(deleteDoc(doc(ana, 'salas', 'VIVA', 'jugadores', 'ana'))));
 

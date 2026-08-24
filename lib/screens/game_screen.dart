@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,8 +8,10 @@ import '../models/jugador.dart';
 import '../models/sala.dart';
 import '../repositories/game_repository.dart';
 import '../repositories/preferencias.dart';
+import '../repositories/voz_repository.dart';
 import '../theme/app_theme.dart';
 import '../widgets/animacion_jugada.dart';
+import '../widgets/anuncio_jugada.dart';
 import '../widgets/asiento_widget.dart';
 import '../widgets/aviso_turno.dart';
 import '../widgets/carta_widget.dart';
@@ -32,8 +36,9 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen>
-    with SingleTickerProviderStateMixin {
+// Dos animaciones a la vez (el destello del turno y la jugada), asi que
+// hace falta el mixin que admite varias.
+class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   late final GameRepository _repo = widget.repositorio ?? GameRepository();
 
   /// Destello de los bordes cuando te toca. Se crea en [initState] y no con
@@ -44,6 +49,26 @@ class _GameScreenState extends State<GameScreen>
   /// De quién era el turno la última vez que se dibujó, para saber cuándo
   /// acaba de pasar a ser el tuyo.
   String? _turnoAnterior;
+
+  /// Animación de la jugada que acaba de ocurrir en la mesa.
+  late final AnimationController _animJugada;
+
+  /// Identifica la jugada ya animada, para no repetir la animación en cada
+  /// reconstrucción.
+  String? _jugadaAnimada;
+
+  // --- Micrófono al caer eliminado ---
+  final VozRepository _voz = VozRepository();
+  StreamSubscription<List<Reaccion>>? _escuchaVoz;
+
+  /// Reacciones ya sonadas, para no repetirlas en cada actualización.
+  final Set<String> _reaccionesOidas = {};
+
+  bool _microActivado = true;
+  bool _grabando = false;
+
+  /// Si yo seguía vivo la última vez, para detectar el momento de caer.
+  bool _seguiaVivo = true;
 
   bool _avisoActivado = true;
 
@@ -73,15 +98,86 @@ class _GameScreenState extends State<GameScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     );
+    _animJugada = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+      value: 1,
+    );
     Preferencias.avisoTurno().then((activo) {
       if (mounted) setState(() => _avisoActivado = activo);
+    });
+    Preferencias.microAlCaer().then((activo) {
+      if (mounted) setState(() => _microActivado = activo);
+    });
+
+    // Las reacciones de voz de los demas suenan segun llegan.
+    _escuchaVoz = _voz.escuchar(widget.idSala).listen((reacciones) {
+      for (final reaccion in reacciones) {
+        if (_reaccionesOidas.contains(reaccion.id)) continue;
+        _reaccionesOidas.add(reaccion.id);
+        // La tuya no te la reproducimos: ya te has oido.
+        if (reaccion.uid == widget.miUid) continue;
+        _voz.reproducir(reaccion);
+      }
     });
   }
 
   @override
   void dispose() {
     _destello.dispose();
+    _animJugada.dispose();
+    _escuchaVoz?.cancel();
+    _voz.soltar();
     super.dispose();
+  }
+
+  /// Cuando caes eliminado se abre tu micro unos segundos y la sala oye lo
+  /// que sueltas. Solo graba el movil del que cae.
+  void _vigilarEliminacion(Jugador yo) {
+    final acaboDeCaer = _seguiaVivo && !yo.vivo;
+    _seguiaVivo = yo.vivo;
+    if (!acaboDeCaer || !_microActivado || _grabando) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      setState(() => _grabando = true);
+      await _voz.grabarYEnviar(
+        idSala: widget.idSala,
+        uid: widget.miUid,
+        nombre: yo.nombre,
+      );
+      if (mounted) setState(() => _grabando = false);
+    });
+  }
+
+  Future<void> _cambiarMicro() async {
+    final nuevo = !_microActivado;
+    setState(() => _microActivado = nuevo);
+    await Preferencias.guardarMicroAlCaer(nuevo);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          nuevo
+              ? 'Al caer eliminado se abrira tu micro 5 segundos'
+              : 'Tu micro no se abrira al caer',
+        ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  /// Lanza la animación cuando alguien acaba de jugar algo nuevo.
+  void _vigilarJugada(Sala sala) {
+    final jugada = sala.ultimaJugada;
+    if (jugada == null) return;
+    final clave = '${jugada.uid}-${jugada.carta}-${sala.registro.length}';
+    if (clave == _jugadaAnimada) return;
+    _jugadaAnimada = clave;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _animJugada.forward(from: 0);
+    });
   }
 
   /// Vibra y da un destello cuando el turno pasa a ser tuyo.
@@ -570,20 +666,30 @@ class _GameScreenState extends State<GameScreen>
               );
             }
 
+            _vigilarEliminacion(yo);
+
+            // El aviso de "te estoy grabando" va por encima de todo, en
+            // cualquier pantalla: nadie debe tener el micro abierto sin verlo.
+            Widget conAvisoDeMicro(Widget pantalla) => Stack(
+              children: [pantalla, if (_grabando) const _AvisoGrabando()],
+            );
+
             if (sala.terminada) {
               // Antes del marcador se repasa la ronda enseñando las cartas.
               if (!_repasoHecho && sala.historial.isNotEmpty) {
-                return ResumenRondaScreen(
-                  sala: sala,
-                  jugadores: jugadores,
-                  miUid: widget.miUid,
-                  onVerCarta: _dialogoCarta,
-                  onTerminar: () => setState(() => _repasoHecho = true),
+                return conAvisoDeMicro(
+                  ResumenRondaScreen(
+                    sala: sala,
+                    jugadores: jugadores,
+                    miUid: widget.miUid,
+                    onVerCarta: _dialogoCarta,
+                    onTerminar: () => setState(() => _repasoHecho = true),
+                  ),
                 );
               }
-              return _pantallaResultado(sala, jugadores);
+              return conAvisoDeMicro(_pantallaResultado(sala, jugadores));
             }
-            return _pantallaMesa(sala, jugadores, yo);
+            return conAvisoDeMicro(_pantallaMesa(sala, jugadores, yo));
           },
         );
       },
@@ -606,7 +712,7 @@ class _GameScreenState extends State<GameScreen>
     if (_jugadasAnunciadas! >= historial.length) return null;
 
     final jugada = historial[_jugadasAnunciadas!];
-    return AnimacionJugada(
+    return AnuncioJugada(
       // Clave con el índice: al avanzar se crea un estado nuevo y la
       // secuencia empieza desde el volteo.
       key: ValueKey('anuncio-${sala.ronda}-$_jugadasAnunciadas'),
@@ -632,6 +738,7 @@ class _GameScreenState extends State<GameScreen>
     // Se esta jugando: el repaso de la ronda que acabe habra que verlo.
     _repasoHecho = false;
     _vigilarTurno(sala, yo);
+    _vigilarJugada(sala);
 
     final animacion = _anuncioDeJugada(sala, jugadores);
 
@@ -796,6 +903,18 @@ class _GameScreenState extends State<GameScreen>
           IconButton(
             visualDensity: VisualDensity.compact,
             icon: Icon(
+              _microActivado ? Icons.mic : Icons.mic_off,
+              size: 20,
+              color: _microActivado ? AppColors.acento : AppColors.textoTenue,
+            ),
+            tooltip: _microActivado
+                ? 'Al caer, tu micro se abre 5 s: activado'
+                : 'Al caer, tu micro se abre 5 s: desactivado',
+            onPressed: _cambiarMicro,
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            icon: Icon(
               _avisoActivado
                   ? Icons.notifications_active
                   : Icons.notifications_off,
@@ -908,6 +1027,10 @@ class _GameScreenState extends State<GameScreen>
         altura: altura,
         onTap: () => _apuntarA(r, valorSeleccionado!),
         onVerCarta: _dialogoCarta,
+        // Si la ultima jugada le afecto, su sitio lo acusa.
+        reaccion: sala.ultimaJugada?.objetivoUid == r.uid
+            ? sala.ultimaJugada!.efecto.reaccion
+            : ReaccionAsiento.ninguna,
       );
     }).toList();
 
@@ -1064,119 +1187,16 @@ class _GameScreenState extends State<GameScreen>
         const relleno = 10.0;
         final altoCarta = restricciones.maxHeight - relleno * 2;
 
-        // Con poco alto no cabe la ficha completa: se pasa a una linea.
-        final compacto = altoCarta < 82;
-        // Encima del texto explicativo van etiqueta, nombre y carta.
-        const hCabecera = 58.0;
-        final lineas = ((altoCarta - hCabecera) / 15).floor().clamp(0, 5);
-
-        return AnimatedSwitcher(
-          duration: const Duration(milliseconds: 320),
-          switchInCurve: Curves.easeOutBack,
-          transitionBuilder: (hijo, animacion) => FadeTransition(
-            opacity: animacion,
-            child: ScaleTransition(scale: animacion, child: hijo),
-          ),
-          child: Panel(
-            // La clave hace que la carta "entre" cada vez que alguien juega.
-            key: ValueKey(
-              '${jugada.uid}-${jugada.carta}-${sala.registro.length}',
-            ),
-            padding: const EdgeInsets.all(relleno),
-            borde: color.withValues(alpha: 0.45),
-            child: compacto
-                ? Row(
-                    children: [
-                      CartaWidget(
-                        valor: jugada.carta,
-                        altura: altoCarta,
-                        onTap: () => _dialogoCarta(jugada.carta),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          '${jugada.nombre}: ${jugada.carta} '
-                          '${Cartas.nombreCorto(jugada.carta)}',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      CartaWidget(
-                        valor: jugada.carta,
-                        altura: altoCarta,
-                        onTap: () => _dialogoCarta(jugada.carta),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Etiqueta('ultima jugada'),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Container(
-                                  width: 8,
-                                  height: 8,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: color,
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Flexible(
-                                  child: Text(
-                                    jugada.nombre,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 13.5,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '${jugada.carta}  '
-                              '${Cartas.nombreCorto(jugada.carta)}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.acentoSuave,
-                              ),
-                            ),
-                            if (jugada.resultado.isNotEmpty && lineas > 0) ...[
-                              const SizedBox(height: 4),
-                              Text(
-                                jugada.resultado,
-                                maxLines: lineas,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 11.5,
-                                  height: 1.28,
-                                  color: AppColors.textoSuave,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+        return Panel(
+          key: const Key('ultimaJugada'),
+          padding: const EdgeInsets.all(relleno),
+          borde: color.withValues(alpha: 0.45),
+          child: AnimacionJugada(
+            jugada: jugada,
+            animacion: _animJugada,
+            colorJugador: color,
+            altoCarta: altoCarta,
+            onVerCarta: () => _dialogoCarta(jugada.carta),
           ),
         );
       },
@@ -1717,6 +1737,60 @@ class _GameScreenState extends State<GameScreen>
       onVolverAlLobby: () => _repo.volverAlLobby(widget.idSala),
       onHistorial: () => _hojaHistorial(sala),
       onVerCarta: _dialogoCarta,
+    );
+  }
+}
+
+/// Barra roja bien visible mientras el micro esta abierto.
+class _AvisoGrabando extends StatelessWidget {
+  const _AvisoGrabando();
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: 0,
+      right: 0,
+      top: 0,
+      child: Material(
+        color: Colors.transparent,
+        child: SafeArea(
+          bottom: false,
+          child: Container(
+            margin: const EdgeInsets.all(10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.peligro,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.peligro.withValues(alpha: 0.5),
+                  blurRadius: 18,
+                ),
+              ],
+            ),
+            child: const Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.mic, size: 18, color: Colors.white),
+                SizedBox(width: 10),
+                Flexible(
+                  child: Text(
+                    'MICRO ABIERTO · te esta oyendo la sala',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 12.5,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -1,7 +1,10 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 
 import '../models/jugador.dart';
 import '../theme/app_theme.dart';
+import 'animacion_jugada.dart';
 import 'carta_widget.dart';
 
 /// El "sitio en la mesa" de un rival: avatar, estado, fichas y lo que ha jugado.
@@ -17,6 +20,10 @@ class AsientoWidget extends StatefulWidget {
   /// poder verla en grande.
   final void Function(int valor)? onVerCarta;
 
+  /// Lo que le acaba de pasar a este jugador, para que su sitio reaccione
+  /// (una sacudida al caer, un destello de escudo...).
+  final ReaccionAsiento reaccion;
+
   const AsientoWidget({
     super.key,
     required this.jugador,
@@ -26,17 +33,25 @@ class AsientoWidget extends StatefulWidget {
     required this.altura,
     this.onTap,
     this.onVerCarta,
+    this.reaccion = ReaccionAsiento.ninguna,
   });
 
   @override
   State<AsientoWidget> createState() => _AsientoWidgetState();
 }
 
+// Dos animaciones: el pulso de "apuntame" y la reaccion al recibir algo.
 class _AsientoWidgetState extends State<AsientoWidget>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late final AnimationController _pulso = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 900),
+  );
+
+  /// Sacudida / destello cuando a este jugador le pasa algo.
+  late final AnimationController _reaccion = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 700),
   );
 
   @override
@@ -54,12 +69,59 @@ class _AsientoWidgetState extends State<AsientoWidget>
       _pulso.stop();
       _pulso.value = 0;
     }
+    if (widget.reaccion != oldWidget.reaccion &&
+        widget.reaccion != ReaccionAsiento.ninguna) {
+      _reaccion.forward(from: 0);
+    }
   }
 
   @override
   void dispose() {
     _pulso.dispose();
+    _reaccion.dispose();
     super.dispose();
+  }
+
+  /// Envuelve el asiento con la reaccion: temblor y un halo de color.
+  Widget _conReaccion(Widget hijo) {
+    if (widget.reaccion == ReaccionAsiento.ninguna) return hijo;
+
+    final color = switch (widget.reaccion) {
+      ReaccionAsiento.golpe => AppColors.peligro,
+      ReaccionAsiento.escudo => AppColors.escudo,
+      ReaccionAsiento.cambio => AppColors.secreto,
+      ReaccionAsiento.ninguna => AppColors.borde,
+    };
+
+    return AnimatedBuilder(
+      animation: _reaccion,
+      builder: (context, _) {
+        final t = _reaccion.value;
+        if (t == 0 || t == 1) return hijo;
+
+        // Temblor que se va apagando (solo al ser golpeado).
+        final temblor = widget.reaccion == ReaccionAsiento.golpe
+            ? sin(t * pi * 6) * 6 * (1 - t)
+            : 0.0;
+
+        return Transform.translate(
+          offset: Offset(temblor, 0),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withValues(alpha: 0.55 * (1 - t)),
+                  blurRadius: 20 * (1 - t) + 4,
+                  spreadRadius: 3 * (1 - t),
+                ),
+              ],
+            ),
+            child: hijo,
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -86,33 +148,35 @@ class _AsientoWidgetState extends State<AsientoWidget>
         final brillo = widget.seleccionable ? _pulso.value : 0.0;
         return Transform.scale(
           scale: 1 + brillo * 0.03,
-          child: Container(
-            width: 118,
-            margin: const EdgeInsets.symmetric(horizontal: 4),
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
-            decoration: BoxDecoration(
-              color: j.vivo
-                  ? AppColors.superficie.withValues(alpha: 0.8)
-                  : AppColors.fondo.withValues(alpha: 0.7),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: colorBorde,
-                width: widget.seleccionable || widget.esSuTurno || j.protegido
-                    ? 2
-                    : 1,
-              ),
-              boxShadow: widget.seleccionable
-                  ? [
-                      BoxShadow(
-                        color: AppColors.acento.withValues(
-                          alpha: 0.25 + brillo * 0.35,
+          child: _conReaccion(
+            Container(
+              width: 118,
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+              decoration: BoxDecoration(
+                color: j.vivo
+                    ? AppColors.superficie.withValues(alpha: 0.8)
+                    : AppColors.fondo.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: colorBorde,
+                  width: widget.seleccionable || widget.esSuTurno || j.protegido
+                      ? 2
+                      : 1,
+                ),
+                boxShadow: widget.seleccionable
+                    ? [
+                        BoxShadow(
+                          color: AppColors.acento.withValues(
+                            alpha: 0.25 + brillo * 0.35,
+                          ),
+                          blurRadius: 14 + brillo * 8,
                         ),
-                        blurRadius: 14 + brillo * 8,
-                      ),
-                    ]
-                  : null,
+                      ]
+                    : null,
+              ),
+              child: child,
             ),
-            child: child,
           ),
         );
       },

@@ -56,6 +56,21 @@ class CartaRevelada {
 
 /// La última carta que se ha puesto boca arriba sobre la mesa, para poder
 /// enseñarla en grande a todo el mundo.
+/// Lo que provoca una carta, para poder animarlo en vez de solo contarlo.
+class Efecto {
+  Efecto._();
+
+  static const nada = 'nada';
+  static const eliminado = 'eliminado';
+  static const autoEliminado = 'auto_eliminado';
+  static const protegido = 'protegido';
+  static const intercambio = 'intercambio';
+  static const fallo = 'fallo';
+  static const mirada = 'mirada';
+  static const rebarajado = 'rebarajado';
+  static const forzado = 'forzado';
+}
+
 class UltimaJugada {
   final String uid;
   final String nombre;
@@ -64,6 +79,12 @@ class UltimaJugada {
   /// Qué pasó al jugarla, en una frase.
   final String resultado;
 
+  /// A quién iba dirigida, si iba a alguien.
+  final String? objetivoUid;
+  final String? objetivoNombre;
+
+  /// Uno de los valores de [Efecto].
+  final String efecto;
   /// Cartas que quedaron a la vista de todos como consecuencia, en orden.
   final List<CartaRevelada> reveladas;
 
@@ -72,6 +93,9 @@ class UltimaJugada {
     required this.nombre,
     required this.carta,
     required this.resultado,
+    this.objetivoUid,
+    this.objetivoNombre,
+    this.efecto = Efecto.nada,
     this.reveladas = const [],
   });
 
@@ -84,6 +108,9 @@ class UltimaJugada {
       nombre: data['nombre'] as String? ?? '',
       carta: carta,
       resultado: data['resultado'] as String? ?? '',
+      objetivoUid: data['objetivo_uid'] as String?,
+      objetivoNombre: data['objetivo_nombre'] as String?,
+      efecto: data['efecto'] as String? ?? Efecto.nada,
       reveladas: CartaRevelada.listaDesde(data['reveladas']),
     );
   }
@@ -93,8 +120,22 @@ class UltimaJugada {
         'nombre': nombre,
         'carta': carta,
         'resultado': resultado,
+        'objetivo_uid': objetivoUid,
+        'objetivo_nombre': objetivoNombre,
+        'efecto': efecto,
         'reveladas': reveladas.map((r) => r.toMap()).toList(),
       };
+
+  UltimaJugada copiaCon({String? resultado, String? efecto}) => UltimaJugada(
+        uid: uid,
+        nombre: nombre,
+        carta: carta,
+        resultado: resultado ?? this.resultado,
+        objetivoUid: objetivoUid,
+        objetivoNombre: objetivoNombre,
+        efecto: efecto ?? this.efecto,
+        reveladas: reveladas,
+      );
 }
 
 class Sala {
