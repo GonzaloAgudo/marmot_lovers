@@ -638,7 +638,7 @@ void main() {
   });
 
   group('Animacion de la jugada', () {
-    testWidgets('una eliminacion se ve con su sello, no con un parrafo',
+    testWidgets('una eliminacion se ve con su sello y ademas se puede leer',
         (tester) async {
       await _pintar(
         tester,
@@ -661,8 +661,8 @@ void main() {
 
       expect(find.text('Javi fuera'), findsOneWidget);
       expect(find.byIcon(Icons.dangerous), findsWidgets);
-      // El parrafo largo ya no esta en la mesa.
-      expect(find.textContaining('gana la comparacion'), findsNothing);
+      // El sello se ve de un vistazo, pero el texto tambien se puede leer.
+      expect(find.textContaining('gana la comparacion'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

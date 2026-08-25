@@ -96,6 +96,10 @@ class VozRepository {
         'nombre': nombre,
         'formato': kIsWeb ? 'webm' : 'm4a',
         'datos': base64Encode(datos),
+        // `enviado` lo pone el propio movil: Firestore descarta de un
+        // orderBy los documentos a los que aun les falta el campo, y el
+        // serverTimestamp tarda un viaje de ida y vuelta en aparecer.
+        'enviado': DateTime.now().millisecondsSinceEpoch,
         'creado': FieldValue.serverTimestamp(),
       });
       return true;
@@ -141,7 +145,7 @@ class VozRepository {
 
   Stream<List<Reaccion>> _escuchar(String idSala) {
     return _audios(idSala)
-        .orderBy('creado', descending: true)
+        .orderBy('enviado', descending: true)
         .limit(5)
         .snapshots()
         .map((snap) {
@@ -152,9 +156,10 @@ class VozRepository {
 
         // Las de hace rato no se reproducen: al entrar a mitad de partida
         // no queremos que suene todo lo de antes.
-        final creado = (d['creado'] as Timestamp?)?.toDate();
-        if (creado == null) continue;
-        if (ahora.difference(creado) > caducidad) continue;
+        final enviado = (d['enviado'] as num?)?.toInt();
+        if (enviado == null) continue;
+        final cuando = DateTime.fromMillisecondsSinceEpoch(enviado);
+        if (ahora.difference(cuando).abs() > caducidad) continue;
 
         final base64 = d['datos'] as String?;
         if (base64 == null || base64.isEmpty) continue;
@@ -175,13 +180,91 @@ class VozRepository {
     }).handleError((_) => <Reaccion>[]);
   }
 
+  final List<Reaccion> _cola = [];
+  bool _sonando = false;
+
+  /// Encola la reacción y la reproduce en cuanto le toque.
+  ///
+  /// Sin cola, dos reacciones que llegan juntas usan el mismo reproductor y
+  /// la segunda corta a la primera: solo se oiría una.
   Future<void> reproducir(Reaccion reaccion) async {
+    _cola.add(reaccion);
+    if (_sonando) return;
+    _sonando = true;
+    try {
+      while (_cola.isNotEmpty) {
+        final siguiente = _cola.removeAt(0);
+        await _sonar(siguiente);
+      }
+    } finally {
+      _sonando = false;
+    }
+  }
+
+  Future<void> _sonar(Reaccion reaccion) async {
     try {
       _usado = true;
+      await _altavoz.stop();
+      await _altavoz.setVolume(1);
       await _altavoz.play(
         BytesSource(reaccion.datos, mimeType: _mime(reaccion.formato)),
       );
+      // Esperar a que acabe para que la siguiente no la pise.
+      await _altavoz.onPlayerComplete.first
+          .timeout(duracion + const Duration(seconds: 3));
     } catch (_) {}
+  }
+
+  /// Prepara el altavoz con un sonido mudo.
+  ///
+  /// Los navegadores no dejan reproducir audio hasta que la persona toca la
+  /// página: si no se hace esto, las reacciones se quedan bloqueadas y
+  /// suenan todas de golpe al primer toque, normalmente al acabar la ronda.
+  Future<void> desbloquear() async {
+    if (_desbloqueado) return;
+    _desbloqueado = true;
+    try {
+      _usado = true;
+      await _altavoz.setVolume(0);
+      await _altavoz.play(BytesSource(_silencio, mimeType: 'audio/wav'));
+      await _altavoz.stop();
+      await _altavoz.setVolume(1);
+    } catch (_) {}
+  }
+
+  bool _desbloqueado = false;
+
+  /// WAV minimo: cabecera de 44 bytes y unas muestras mudas.
+  static final Uint8List _silencio = _wavMudo();
+
+  static Uint8List _wavMudo() {
+    const muestras = 64;
+    final datos = BytesBuilder();
+    void texto(String t) => datos.add(t.codeUnits);
+    void u32(int v) => datos.add([
+          v & 0xff,
+          (v >> 8) & 0xff,
+          (v >> 16) & 0xff,
+          (v >> 24) & 0xff,
+        ]);
+    void u16(int v) => datos.add([v & 0xff, (v >> 8) & 0xff]);
+
+    texto('RIFF');
+    u32(36 + muestras);
+    texto('WAVE');
+    texto('fmt ');
+    u32(16);
+    u16(1); // PCM
+    u16(1); // mono
+    u32(8000);
+    u32(8000);
+    u16(1);
+    u16(8); // 8 bits
+    texto('data');
+    u32(muestras);
+    // En 8 bits sin signo, el silencio es 128.
+    datos.add(List<int>.filled(muestras, 128));
+    return datos.toBytes();
   }
 
   String _mime(String formato) =>

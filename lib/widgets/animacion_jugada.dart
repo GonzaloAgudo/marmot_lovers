@@ -68,6 +68,9 @@ class AnimacionJugada extends StatelessWidget {
   final double altoCarta;
   final VoidCallback? onVerCarta;
 
+  /// Cuantas lineas de explicacion caben al lado de la carta. 0 = ninguna.
+  final int lineasTexto;
+
   const AnimacionJugada({
     super.key,
     required this.jugada,
@@ -75,6 +78,7 @@ class AnimacionJugada extends StatelessWidget {
     required this.colorJugador,
     required this.altoCarta,
     this.onVerCarta,
+    this.lineasTexto = 2,
   });
 
   @override
@@ -128,6 +132,24 @@ class AnimacionJugada extends StatelessWidget {
                   if (pinta != null) ...[
                     const SizedBox(height: 8),
                     _sello(pinta, salida),
+                  ],
+                  // El sello se ve de un vistazo, pero el texto tambien se
+                  // puede leer: no todo el mundo quiere adivinar iconos.
+                  if (jugada.resultado.isNotEmpty && lineasTexto > 0) ...[
+                    const SizedBox(height: 6),
+                    Opacity(
+                      opacity: salida.clamp(0.0, 1.0),
+                      child: Text(
+                        jugada.resultado,
+                        maxLines: lineasTexto,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          height: 1.28,
+                          color: AppColors.textoSuave,
+                        ),
+                      ),
+                    ),
                   ],
                 ],
               ),

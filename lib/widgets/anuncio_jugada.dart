@@ -109,7 +109,24 @@ class _AnuncioJugadaState extends State<AnuncioJugada> {
                               widget.jugada.reveladas[_paso - 1], altoCarta),
                     ),
                   ),
-                  const SizedBox(height: 22),
+                  if (widget.jugada.resultado.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 460),
+                      child: Text(
+                        widget.jugada.resultado,
+                        textAlign: TextAlign.center,
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          height: 1.35,
+                          color: AppColors.texto,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 18),
                   const Text(
                     'toca para saltar',
                     style: TextStyle(

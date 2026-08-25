@@ -647,54 +647,59 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<Sala>(
-      stream: _salaStream,
-      builder: (context, snapSala) {
-        if (!snapSala.hasData) return const _Cargando();
-        final sala = snapSala.data!;
+    // Cualquier toque vale para desbloquear el audio del navegador. Es
+    // Listener y no GestureDetector para no robarle el gesto a nadie.
+    return Listener(
+      onPointerDown: (_) => _voz.desbloquear(),
+      child: StreamBuilder<Sala>(
+        stream: _salaStream,
+        builder: (context, snapSala) {
+          if (!snapSala.hasData) return const _Cargando();
+          final sala = snapSala.data!;
 
-        return StreamBuilder<List<Jugador>>(
-          stream: _jugadoresStream,
-          builder: (context, snapJugadores) {
-            if (!snapJugadores.hasData) return const _Cargando();
+          return StreamBuilder<List<Jugador>>(
+            stream: _jugadoresStream,
+            builder: (context, snapJugadores) {
+              if (!snapJugadores.hasData) return const _Cargando();
 
-            final jugadores = snapJugadores.data!;
-            final yo = _buscar(jugadores, widget.miUid);
-            if (yo == null) {
-              return const Scaffold(
-                body: MesaFondo(
-                  child: Center(child: Text('Ya no estas en esta partida')),
-                ),
-              );
-            }
-
-            _vigilarEliminacion(yo);
-
-            // El aviso de "te estoy grabando" va por encima de todo, en
-            // cualquier pantalla: nadie debe tener el micro abierto sin verlo.
-            Widget conAvisoDeMicro(Widget pantalla) => Stack(
-              children: [pantalla, if (_grabando) const _AvisoGrabando()],
-            );
-
-            if (sala.terminada) {
-              // Antes del marcador se repasa la ronda enseñando las cartas.
-              if (!_repasoHecho && sala.historial.isNotEmpty) {
-                return conAvisoDeMicro(
-                  ResumenRondaScreen(
-                    sala: sala,
-                    jugadores: jugadores,
-                    miUid: widget.miUid,
-                    onVerCarta: _dialogoCarta,
-                    onTerminar: () => setState(() => _repasoHecho = true),
+              final jugadores = snapJugadores.data!;
+              final yo = _buscar(jugadores, widget.miUid);
+              if (yo == null) {
+                return const Scaffold(
+                  body: MesaFondo(
+                    child: Center(child: Text('Ya no estas en esta partida')),
                   ),
                 );
               }
-              return conAvisoDeMicro(_pantallaResultado(sala, jugadores));
-            }
-            return conAvisoDeMicro(_pantallaMesa(sala, jugadores, yo));
-          },
-        );
-      },
+
+              _vigilarEliminacion(yo);
+
+              // El aviso de "te estoy grabando" va por encima de todo, en
+              // cualquier pantalla: nadie debe tener el micro abierto sin verlo.
+              Widget conAvisoDeMicro(Widget pantalla) => Stack(
+                children: [pantalla, if (_grabando) const _AvisoGrabando()],
+              );
+
+              if (sala.terminada) {
+                // Antes del marcador se repasa la ronda enseñando las cartas.
+                if (!_repasoHecho && sala.historial.isNotEmpty) {
+                  return conAvisoDeMicro(
+                    ResumenRondaScreen(
+                      sala: sala,
+                      jugadores: jugadores,
+                      miUid: widget.miUid,
+                      onVerCarta: _dialogoCarta,
+                      onTerminar: () => setState(() => _repasoHecho = true),
+                    ),
+                  );
+                }
+                return conAvisoDeMicro(_pantallaResultado(sala, jugadores));
+              }
+              return conAvisoDeMicro(_pantallaMesa(sala, jugadores, yo));
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -1189,6 +1194,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         const relleno = 10.0;
         final altoCarta = restricciones.maxHeight - relleno * 2;
 
+        // Encima del texto van nombre, carta y sello: lo que sobre son las
+        // lineas que se pueden leer sin desbordar.
+        final lineas = ((altoCarta - 92) / 15).floor().clamp(0, 3);
+
         return Panel(
           key: const Key('ultimaJugada'),
           padding: const EdgeInsets.all(relleno),
@@ -1198,6 +1207,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             animacion: _animJugada,
             colorJugador: color,
             altoCarta: altoCarta,
+            lineasTexto: lineas,
             onVerCarta: () => _dialogoCarta(jugada.carta),
           ),
         );
